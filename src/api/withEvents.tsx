@@ -1,4 +1,4 @@
-import { FC, memo } from "react";
+import { JSX, memo } from "react";
 
 import { ComponentIdContext } from "../context";
 import { useComponentId } from "./useComponentId";

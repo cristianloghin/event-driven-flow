@@ -92,7 +92,7 @@ export function useEventState<
       setState(newState);
       emit(channel, action, { ...state, ...newValue }); // emit the entire updated state
     },
-    [channel, action, emit]
+    [state, channel, action, emit]
   );
 
   return [state, updateState];

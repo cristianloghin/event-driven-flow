@@ -45,7 +45,14 @@ export function useSubscribe<
         globalEventManager.unsubscribe(listenerIdRef.current);
       }
     };
-  }, [channel, action, options.once, options.filter]);
+  }, [
+    channel,
+    action,
+    options.once,
+    options.filter,
+    options.selector,
+    componentId,
+  ]);
 
   return listenerIdRef.current;
 }

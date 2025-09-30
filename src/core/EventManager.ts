@@ -21,7 +21,7 @@ export class EventManager {
   private lastPayloads = new Map<string, ActionState>();
 
   constructor(config: { debug?: boolean } = {}) {
-    this.debugMode = config.debug || true;
+    this.debugMode = config.debug || process.env.NODE_ENV === "development";
   }
 
   // Component registration
@@ -29,7 +29,7 @@ export class EventManager {
     componentName: string,
     metadata: Omit<ComponentMetadata, "name" | "registeredAt"> = {}
   ) {
-    const componentId = `${componentName}_${Date.now()}`;
+    const componentId = crypto.randomUUID();
     this.componentRegistry.set(componentId, {
       name: componentName,
       registeredAt: Date.now(),
