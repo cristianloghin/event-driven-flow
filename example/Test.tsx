@@ -1,16 +1,9 @@
 import { useEffect, useState } from "react";
 
-import {
-  createChannel,
-  useEmit,
-  useEventState,
-  useSubscribe,
-  withEvents,
-  withService,
-} from "@frontend/icomera-utils/event-manager";
+import { createChannel, useSyncState, withEvents, withService } from "../src";
 
 // Import the new debug tools
-import { EventManagerDebug } from "../dev-tools";
+import { EventManagerDebug } from "../src/dev-tools";
 
 // Define channel schemas
 type UserStatus = "online" | "away" | "offline";
@@ -87,13 +80,23 @@ const orderDomain = createChannel<OrderChannelSchema>("order", {
 });
 
 const UserProfileComponent = withEvents("UserProfile", { domain: "user" })(
-  () => {
-    const [user, setUser] = useEventState(userChannel, "profileChanged", {
-      restoreOnMount: true,
-    });
-    const [status, setStatus] = useEventState(userChannel, "statusChanged", {
-      restoreOnMount: true,
-    });
+  (mailbox) => {
+    const [user, setUser] = useSyncState(
+      mailbox,
+      userChannel,
+      "profileChanged",
+      {
+        restoreOnMount: true,
+      }
+    );
+    const [status, setStatus] = useSyncState(
+      mailbox,
+      userChannel,
+      "statusChanged",
+      {
+        restoreOnMount: true,
+      }
+    );
 
     // Simulate API call
     useEffect(() => {
@@ -152,11 +155,9 @@ const UserProfileComponent = withEvents("UserProfile", { domain: "user" })(
   }
 );
 
-const NotificationService = withService("NotificationService")(() => {
-  const emit = useEmit();
-
+const NotificationService = withService("NotificationService")((mailbox) => {
   // Listen to user status changes
-  useSubscribe(userChannel, "statusChanged", (payload) => {
+  mailbox.receive(userChannel, "statusChanged", (payload) => {
     const notification = {
       id: Date.now(),
       message: `User status changed to ${payload.status}`,
@@ -165,15 +166,15 @@ const NotificationService = withService("NotificationService")(() => {
     };
 
     // Emit notification event for other components
-    emit(appDomain, "notification", notification);
+    mailbox.tell(appDomain, "notification", notification);
   });
 });
 
-const NotificationDisplay = withEvents("NotificationDisplay")(() => {
+const NotificationDisplay = withEvents("NotificationDisplay")((mailbox) => {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   // Subscribe to app notifications
-  useSubscribe(appDomain, "notification", (notification) => {
+  mailbox.receive(appDomain, "notification", (notification) => {
     setNotifications((prev) => [notification, ...prev.slice(0, 4)]);
   });
 
@@ -209,15 +210,14 @@ const NotificationDisplay = withEvents("NotificationDisplay")(() => {
   );
 });
 
-const OrderManager = withEvents("OrderManager")(() => {
-  const emit = useEmit();
+const OrderManager = withEvents("OrderManager")((mailbox) => {
   const [orders, setOrders] = useState([
     { id: "1", status: "pending", total: 99.99 },
     { id: "2", status: "shipped", total: 149.99 },
   ]);
 
   // Subscribe to order updates
-  useSubscribe(orderDomain, "statusUpdated", (payload) => {
+  mailbox.receive(orderDomain, "statusUpdated", (payload) => {
     setOrders((prev) =>
       prev.map((order) =>
         order.id === payload.orderId
@@ -234,7 +234,7 @@ const OrderManager = withEvents("OrderManager")(() => {
       )
     );
 
-    emit(orderDomain, "statusUpdated", {
+    mailbox.tell(orderDomain, "statusUpdated", {
       orderId,
       status: newStatus,
       timestamp: Date.now(),
