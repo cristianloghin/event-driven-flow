@@ -19,6 +19,7 @@ export class EventManager {
   private debugMode: boolean;
   private debugListeners = new Map();
   private lastPayloads = new Map<string, ActionState>();
+  private rateLimiter = new Map<string, { count: number; windowStart: number }>();
 
   constructor(config: { debug?: boolean } = {}) {
     this.debugMode = config.debug || process.env.NODE_ENV === "development";
@@ -111,6 +112,11 @@ export class EventManager {
     const event = this.events.get(eventName);
     if (!event) return;
 
+    // Rate limiting check
+    if (this.isRateLimited(eventName)) {
+      return; // Drop the event if rate limited
+    }
+
     // Generate correlation ID for loop detection
     const correlationId = this.generateCorrelationId(eventName);
     const ancestorIds = new Set(options.ancestorIds || []);
@@ -188,6 +194,31 @@ export class EventManager {
         }
       }
     });
+  }
+
+  private isRateLimited(eventName: string): boolean {
+    const now = Date.now();
+    const window = 1000; // 1 second window
+    const limit = 100; // max 100 events per second per event type
+
+    let tracker = this.rateLimiter.get(eventName);
+
+    // Reset window if expired
+    if (!tracker || now - tracker.windowStart > window) {
+      tracker = { count: 0, windowStart: now };
+      this.rateLimiter.set(eventName, tracker);
+    }
+
+    tracker.count++;
+
+    if (tracker.count > limit) {
+      if (this.debugMode) {
+        console.warn(`⚠️ Rate limit exceeded for ${eventName}: ${tracker.count}/${limit} events per second`);
+      }
+      return true;
+    }
+
+    return false;
   }
 
   generateCorrelationId(channelName: string) {
