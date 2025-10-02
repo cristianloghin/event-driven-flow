@@ -10,7 +10,7 @@ export function withEvents(componentName: string, metadata = {}) {
       const mailboxRef = useRef<ComponentMailbox | null>(null);
 
       if (!mailboxRef.current) {
-        mailboxRef.current = new ComponentMailbox(componentName);
+        mailboxRef.current = new ComponentMailbox(componentName, metadata);
       }
 
       useEffect(() => {

@@ -2,10 +2,7 @@ import { memo, useEffect, useRef } from "react";
 import { ComponentMailbox } from "../core/ComponentMailbox";
 
 // Helper component that calls the function and returns null
-export function withService(
-  serviceName: string,
-  metadata?: { [key: string]: any }
-) {
+export function withService(serviceName: string, metadata = {}) {
   return function (
     ServiceFn: (mailbox: ComponentMailbox) => void | (() => void)
   ) {
@@ -13,7 +10,7 @@ export function withService(
       const mailboxRef = useRef<ComponentMailbox | null>(null);
 
       if (!mailboxRef.current) {
-        mailboxRef.current = new ComponentMailbox(serviceName);
+        mailboxRef.current = new ComponentMailbox(serviceName, metadata);
       }
 
       useEffect(() => {

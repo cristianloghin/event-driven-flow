@@ -19,31 +19,26 @@ export class EventManager {
   private debugMode: boolean;
   private debugListeners = new Map();
   private lastPayloads = new Map<string, ActionState>();
-  private rateLimiter = new Map<string, { count: number; windowStart: number }>();
+  private rateLimiter = new Map<
+    string,
+    { count: number; windowStart: number }
+  >();
 
   constructor(config: { debug?: boolean } = {}) {
     this.debugMode = config.debug || process.env.NODE_ENV === "development";
   }
 
   // Component registration
-  registerComponent(
-    componentName: string,
-    metadata: Omit<ComponentMetadata, "name" | "registeredAt"> = {}
-  ) {
-    const componentId = crypto.randomUUID();
-    this.componentRegistry.set(componentId, {
-      name: componentName,
-      registeredAt: Date.now(),
-      ...metadata,
-    });
-    console.info(`📦 Component registered: ${componentId}`);
+  registerComponent(componentId: string, metadata: ComponentMetadata) {
+    this.componentRegistry.set(componentId, metadata);
+    console.debug(`📦 Component registered: ${componentId}`);
     this.notifyDebugger();
     return componentId;
   }
 
   unregisterComponent(componentId: string) {
     this.componentRegistry.delete(componentId);
-    console.info(`🗑️ Component unregistered: ${componentId}`);
+    console.debug(`🗑️ Component unregistered: ${componentId}`);
     this.notifyDebugger();
   }
 
@@ -62,6 +57,46 @@ export class EventManager {
 
     if (!this.events.has(eventName)) {
       this.events.set(eventName, new Set());
+    }
+
+    const shouldDedupe = options.dedupe !== false; // default true
+
+    // Dedupe logic: if componentId provided & an existing listener for same componentId+eventName exists,
+    // update that listener instead of creating a new one.
+    if (shouldDedupe && options.componentId) {
+      const currentSet = this.events.get(eventName);
+      if (currentSet) {
+        const existing = Array.from(currentSet).find(
+          (l) => (l as ListenerInfo).componentId === options.componentId
+        ) as ListenerInfo | undefined;
+        if (existing) {
+          // Update mutable fields
+          (
+            existing as unknown as ListenerInfo<TSchema, TAction, TSelector>
+          ).callback = callback;
+          (
+            existing as unknown as ListenerInfo<TSchema, TAction, TSelector>
+          ).filter = options.filter as any;
+          // Merge once semantics: if either old or new wants once, keep it once
+          existing.once = existing.once || !!options.once;
+          (
+            existing as unknown as ListenerInfo<TSchema, TAction, TSelector>
+          ).selector = options.selector as any;
+
+          if (this.debugMode) {
+            console.debug(
+              `🔁 Deduped subscription: component ${options.componentId} already subscribed to ${eventName} – updated listener.`
+            );
+          }
+          // Return existing ID (stable) — find it via reverse lookup in listeners map
+          for (const [id, info] of this.listeners.entries()) {
+            if (info.listenerInfo === existing) {
+              return id;
+            }
+          }
+          // If somehow not in listeners map (shouldn't happen), continue to register anew.
+        }
+      }
     }
 
     const listenerInfo: ListenerInfo<TSchema, TAction, TSelector> = {
@@ -213,7 +248,9 @@ export class EventManager {
 
     if (tracker.count > limit) {
       if (this.debugMode) {
-        console.warn(`⚠️ Rate limit exceeded for ${eventName}: ${tracker.count}/${limit} events per second`);
+        console.warn(
+          `⚠️ Rate limit exceeded for ${eventName}: ${tracker.count}/${limit} events per second`
+        );
       }
       return true;
     }

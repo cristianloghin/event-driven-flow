@@ -4,8 +4,13 @@ import { ActionState, ChannelSchema, StringKey, TypedChannel } from "../types";
 export class ComponentMailbox {
   private componentId: string;
   private subscriptions: string[] = [];
+  private destroyed = false;
+  private registered = false;
 
-  constructor(private name: string) {
+  constructor(
+    private name: string,
+    private metadata: Record<string, any> = {}
+  ) {
     this.componentId = crypto.randomUUID();
     console.info(
       `🌋 Created mailbox for component: ${this.name} with id: ${this.componentId}`
@@ -17,7 +22,19 @@ export class ComponentMailbox {
       throw new Error("Signal already aborted");
     }
     signal.addEventListener("abort", this.destroy, { once: true });
-    console.info("🌋 Initialized mailbox with id:", this.componentId);
+
+    if (!this.registered) {
+      globalEventManager.registerComponent(this.componentId, {
+        name: this.name,
+        registeredAt: Date.now(),
+        ...this.metadata,
+      });
+      this.registered = true;
+    }
+
+    console.info(
+      `🚀 Initialized mailbox for: ${this.name} with id: ${this.componentId}`
+    );
   };
 
   // Basic message sending
@@ -130,11 +147,20 @@ export class ComponentMailbox {
   }
 
   // Cleanup when component unmounts
-  destroy(): void {
+  destroy = () => {
+    if (this.destroyed) return;
+    this.destroyed = true;
+
     this.subscriptions.forEach((id) => {
       globalEventManager.unsubscribe(id);
     });
     this.subscriptions = [];
-    console.info("🧹 Cleaned up mailbox for:", this.componentId);
-  }
+    if (this.registered) {
+      globalEventManager.unregisterComponent(this.componentId);
+      this.registered = false;
+    }
+    console.info(
+      `🧹 Cleaned up mailbox for ${this.name} with id: ${this.componentId}`
+    );
+  };
 }
