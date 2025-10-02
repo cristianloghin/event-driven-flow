@@ -58,11 +58,11 @@ const userChannel = createChannel<UserChannelSchema>("user", {
 });
 ```
 
-#### `withEvents(componentName: string, metadata?)`
+#### `withMailbox(componentName: string, metadata?)`
 Wraps components to provide mailbox capabilities. Components receive no props from parents.
 
 ```typescript
-const UserProfile = withEvents("UserProfile")((mailbox) => {
+const UserProfile = withMailbox("UserProfile")(({mailbox}) => {
   // Use React useState for local state
   const [isLoading, setIsLoading] = useState(false);
 
@@ -166,7 +166,7 @@ const userChannel = createChannel<{
 }>('user');
 
 // Components communicate via mailboxes
-const UserProfile = withEvents('UserProfile')((mailbox) => {
+const UserProfile = withMailbox('UserProfile')(({mailbox}) => {
   const [user, setUser] = useSyncState(mailbox, userChannel, 'profileChanged');
 
   return (
@@ -179,7 +179,7 @@ const UserProfile = withEvents('UserProfile')((mailbox) => {
   );
 });
 
-const UserStatus = withEvents('UserStatus')((mailbox) => {
+const UserStatus = withMailbox('UserStatus')(({mailbox}) => {
   const [user] = useSyncState(mailbox, userChannel, 'profileChanged');
 
   return <div>Status for {user.name}</div>;
@@ -189,7 +189,7 @@ const UserStatus = withEvents('UserStatus')((mailbox) => {
 ### Service Components with Request-Reply
 
 ```typescript
-const UserService = withService('UserService')((mailbox) => {
+const UserService = withService('UserService')(({mailbox}) => {
   mailbox.receive(userChannel, 'validateProfile', async (request) => {
     const isValid = await validateUser(request);
 
@@ -200,7 +200,7 @@ const UserService = withService('UserService')((mailbox) => {
   });
 });
 
-const UserForm = withEvents('UserForm')((mailbox) => {
+const UserForm = withMailbox('UserForm')(({mailbox}) => {
   const [user, setUser] = useSyncState(mailbox, userChannel, 'profileChanged');
   const [isValidating, setIsValidating] = useState(false);
 
@@ -226,7 +226,7 @@ const UserForm = withEvents('UserForm')((mailbox) => {
 ### Mixed Local and Shared State
 
 ```typescript
-const OrderManager = withEvents('OrderManager')((mailbox) => {
+const OrderManager = withMailbox('OrderManager')(({mailbox}) => {
   // Local state (not shared)
   const [isLoading, setIsLoading] = useState(false);
   const [filters, setFilters] = useState({ status: 'all' });
@@ -234,16 +234,21 @@ const OrderManager = withEvents('OrderManager')((mailbox) => {
   // Shared state (syncs across components)
   const [orders, setOrders] = useSyncState(mailbox, orderChannel, 'listUpdated');
 
-  // Listen for updates from other components
-  mailbox.receive(orderChannel, 'statusUpdated', (payload) => {
-    setOrders(prev =>
-      prev.map(order =>
-        order.id === payload.orderId
-          ? { ...order, status: payload.status }
-          : order
-      )
-    );
-  });
+  useEffect(() => {
+    // Listen for updates from other components
+    const unsub = mailbox.receive(orderChannel, 'statusUpdated', (payload) => {
+      setOrders(prev =>
+        prev.map(order =>
+          order.id === payload.orderId
+            ? { ...order, status: payload.status }
+            : order
+        )
+      );
+    });
+
+    return () => unsub();
+  }, [mailbox])
+  
 
   return (
     <div>
@@ -291,27 +296,6 @@ const OrderManager = withEvents('OrderManager')((mailbox) => {
 - **Familiar patterns** - Works alongside existing React patterns
 - **Gradual adoption** - Can be introduced incrementally
 - **Clear debugging** - Message flows are explicit and traceable
-
-## 🔄 Migration from Hook-based APIs
-
-If migrating from the previous hook-based API:
-
-```typescript
-// Old API
-const emit = useEmit();
-useSubscribe(channel, 'action', handler);
-const [state, setState] = useEventState(channel, 'action');
-
-// New API
-mailbox.tell(channel, 'action', payload);
-mailbox.receive(channel, 'action', handler);
-const [state, setState] = useSyncState(mailbox, channel, 'action');
-```
-
-The new API provides the same functionality with added benefits:
-- **Request-reply patterns** via `mailbox.ask()`
-- **Better encapsulation** via mailbox per component
-- **Cleaner service patterns** via `mailbox.reply()`
 
 ---
 
