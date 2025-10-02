@@ -5,9 +5,20 @@ export class ComponentMailbox {
   private componentId: string;
   private subscriptions: string[] = [];
 
-  constructor(componentId: string) {
-    this.componentId = componentId;
+  constructor(private name: string) {
+    this.componentId = crypto.randomUUID();
+    console.info(
+      `🌋 Created mailbox for component: ${this.name} with id: ${this.componentId}`
+    );
   }
+
+  init = (signal: AbortSignal) => {
+    if (signal.aborted) {
+      throw new Error("Signal already aborted");
+    }
+    signal.addEventListener("abort", this.destroy, { once: true });
+    console.info("🌋 Initialized mailbox with id:", this.componentId);
+  };
 
   // Basic message sending
   tell<TSchema extends ChannelSchema, TAction extends StringKey<TSchema>>(
@@ -124,5 +135,6 @@ export class ComponentMailbox {
       globalEventManager.unsubscribe(id);
     });
     this.subscriptions = [];
+    console.info("🧹 Cleaned up mailbox for:", this.componentId);
   }
 }

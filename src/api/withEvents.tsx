@@ -1,49 +1,32 @@
-import { JSX, memo, useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 
-import { ComponentIdContext } from "../context";
-import { useComponentId } from "./useComponentId";
 import { ComponentMailbox } from "../core/ComponentMailbox";
 
-// Helper component that calls the function and returns the JSX
-const EventComponent = ({
-  mailbox,
-  Component,
-}: {
-  mailbox: ComponentMailbox;
-  Component: (mailbox: ComponentMailbox) => JSX.Element;
-}) => {
-  return Component(mailbox);
-};
-
 export function withEvents(componentName: string, metadata = {}) {
-  return function (Component: (mailbox: ComponentMailbox) => JSX.Element) {
-    const WrappedComponent = () => {
-      const componentId = useComponentId(componentName, metadata);
+  return function (
+    Component: React.ComponentType<{ mailbox: ComponentMailbox }>
+  ) {
+    const Wrapped = () => {
       const mailboxRef = useRef<ComponentMailbox | null>(null);
 
-      if (!mailboxRef.current && componentId) {
-        mailboxRef.current = new ComponentMailbox(componentId);
+      if (!mailboxRef.current) {
+        mailboxRef.current = new ComponentMailbox(componentName);
       }
 
       useEffect(() => {
+        const abortController = new AbortController();
+        mailboxRef.current!.init(abortController.signal);
+
         return () => {
-          mailboxRef.current?.destroy();
+          abortController.abort();
         };
       }, []);
 
-      // Don't render until componentId is available
-      if (!componentId || !mailboxRef.current) {
-        return null;
-      }
-
-      return (
-        <ComponentIdContext.Provider value={componentId}>
-          <EventComponent mailbox={mailboxRef.current} Component={Component} />
-        </ComponentIdContext.Provider>
-      );
+      return <Component mailbox={mailboxRef.current} />;
     };
 
-    WrappedComponent.displayName = componentName;
-    return memo(WrappedComponent);
+    const MemoWrapped = memo(Wrapped);
+    MemoWrapped.displayName = componentName;
+    return MemoWrapped;
   };
 }

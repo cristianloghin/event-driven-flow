@@ -97,33 +97,35 @@ export function useSyncState<
         | Partial<TSelector>
         | ((prevState: TSelector) => TSelector | Partial<TSelector>)
     ) => {
-      let finalState: TSelector;
+      setState((currentState) => {
+        let finalState: TSelector;
 
-      if (typeof newValue === "function") {
-        // Function pattern: setUser(prev => ({ ...prev, name: 'Updated' }))
-        const result = (newValue as Function)(state);
-        finalState =
-          typeof result === "object" &&
-          result !== null &&
-          !Array.isArray(result)
-            ? ({ ...state, ...result } as TSelector) // Partial update
-            : (result as TSelector); // Full replacement
-      } else if (
-        typeof newValue === "object" &&
-        newValue !== null &&
-        !Array.isArray(newValue)
-      ) {
-        // Partial object pattern: setUser({ name: 'Updated' })
-        finalState = { ...state, ...newValue } as TSelector;
-      } else {
-        // Full value pattern: setUser(newUser)
-        finalState = newValue as TSelector;
-      }
+        if (typeof newValue === "function") {
+          // Function pattern: setUser(prev => ({ ...prev, name: 'Updated' }))
+          const result = (newValue as Function)(currentState);
+          finalState =
+            typeof result === "object" &&
+            result !== null &&
+            !Array.isArray(result)
+              ? ({ ...currentState, ...result } as TSelector) // Partial update
+              : (result as TSelector); // Full replacement
+        } else if (
+          typeof newValue === "object" &&
+          newValue !== null &&
+          !Array.isArray(newValue)
+        ) {
+          // Partial object pattern: setUser({ name: 'Updated' })
+          finalState = { ...currentState, ...newValue } as TSelector;
+        } else {
+          // Full value pattern: setUser(newUser)
+          finalState = newValue as TSelector;
+        }
 
-      setState(finalState);
-      mailbox.tell(channel, action, finalState);
+        mailbox.tell(channel, action, finalState);
+        return finalState;
+      });
     },
-    [state, mailbox, channel, action]
+    [mailbox, channel, action]
   );
 
   return [state, updateState];
