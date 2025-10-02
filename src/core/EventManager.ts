@@ -28,17 +28,26 @@ export class EventManager {
     this.debugMode = config.debug || process.env.NODE_ENV === "development";
   }
 
+  private log(
+    method: "debug" | "info" | "error" | "warn",
+    ...message: unknown[]
+  ) {
+    if (this.debugMode) {
+      console[method](...message);
+    }
+  }
+
   // Component registration
   registerComponent(componentId: string, metadata: ComponentMetadata) {
     this.componentRegistry.set(componentId, metadata);
-    console.debug(`📦 Component registered: ${componentId}`);
+    this.log("debug", `📦 Component registered: ${componentId}`);
     this.notifyDebugger();
     return componentId;
   }
 
   unregisterComponent(componentId: string) {
     this.componentRegistry.delete(componentId);
-    console.debug(`🗑️ Component unregistered: ${componentId}`);
+    this.log("debug", `🗑️ Component unregistered: ${componentId}`);
     this.notifyDebugger();
   }
 
@@ -59,46 +68,6 @@ export class EventManager {
       this.events.set(eventName, new Set());
     }
 
-    const shouldDedupe = options.dedupe !== false; // default true
-
-    // Dedupe logic: if componentId provided & an existing listener for same componentId+eventName exists,
-    // update that listener instead of creating a new one.
-    if (shouldDedupe && options.componentId) {
-      const currentSet = this.events.get(eventName);
-      if (currentSet) {
-        const existing = Array.from(currentSet).find(
-          (l) => (l as ListenerInfo).componentId === options.componentId
-        ) as ListenerInfo | undefined;
-        if (existing) {
-          // Update mutable fields
-          (
-            existing as unknown as ListenerInfo<TSchema, TAction, TSelector>
-          ).callback = callback;
-          (
-            existing as unknown as ListenerInfo<TSchema, TAction, TSelector>
-          ).filter = options.filter as any;
-          // Merge once semantics: if either old or new wants once, keep it once
-          existing.once = existing.once || !!options.once;
-          (
-            existing as unknown as ListenerInfo<TSchema, TAction, TSelector>
-          ).selector = options.selector as any;
-
-          if (this.debugMode) {
-            console.debug(
-              `🔁 Deduped subscription: component ${options.componentId} already subscribed to ${eventName} – updated listener.`
-            );
-          }
-          // Return existing ID (stable) — find it via reverse lookup in listeners map
-          for (const [id, info] of this.listeners.entries()) {
-            if (info.listenerInfo === existing) {
-              return id;
-            }
-          }
-          // If somehow not in listeners map (shouldn't happen), continue to register anew.
-        }
-      }
-    }
-
     const listenerInfo: ListenerInfo<TSchema, TAction, TSelector> = {
       id: listenerId,
       callback,
@@ -114,13 +83,12 @@ export class EventManager {
       listenerInfo: listenerInfo as unknown as ListenerInfo,
     });
 
-    if (this.debugMode) {
-      console.info(
-        `🎧 Component ${
-          options.componentId || "unknown"
-        } subscribed to ${eventName}`
-      );
-    }
+    this.log(
+      "info",
+      `🎧 Component ${
+        options.componentId || "unknown"
+      } subscribed to ${eventName}`
+    );
 
     return listenerId;
   }
@@ -158,7 +126,7 @@ export class EventManager {
 
     // Loop detection
     if (ancestorIds.has(correlationId)) {
-      console.warn(`🔄 Loop detected for ${eventName} - breaking chain`);
+      this.log("warn", `🔄 Loop detected for ${eventName} - breaking chain`);
       return;
     }
 
@@ -173,12 +141,11 @@ export class EventManager {
       ...options,
     };
 
-    if (this.debugMode) {
-      console.info(
-        `📡 Event ${eventName} emitted by ${options.emitterId || "unknown"}:`,
-        payload
-      );
-    }
+    this.log(
+      "info",
+      `📡 Event ${eventName} emitted by ${options.emitterId || "unknown"}:`,
+      payload
+    );
 
     const listenersToRemove: ListenerInfo<TSchema, TAction, TSelector>[] = [];
 
@@ -247,11 +214,11 @@ export class EventManager {
     tracker.count++;
 
     if (tracker.count > limit) {
-      if (this.debugMode) {
-        console.warn(
-          `⚠️ Rate limit exceeded for ${eventName}: ${tracker.count}/${limit} events per second`
-        );
-      }
+      this.log(
+        "warn",
+        `⚠️ Rate limit exceeded for ${eventName}: ${tracker.count}/${limit} events per second`
+      );
+
       return true;
     }
 
@@ -331,7 +298,14 @@ export class EventManager {
       componentCallback(transformedComponents);
     }
   }
+
+  cleanup = () => {
+    this.log("info", "🧹 Cleaned up the event manager");
+  };
 }
 
 // Global instance
 export const globalEventManager = new EventManager();
+export function cleanupEventManager() {
+  return () => globalEventManager.cleanup();
+}

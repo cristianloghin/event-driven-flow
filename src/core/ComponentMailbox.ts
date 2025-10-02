@@ -3,7 +3,7 @@ import { ActionState, ChannelSchema, StringKey, TypedChannel } from "../types";
 
 export class ComponentMailbox {
   private componentId: string;
-  private subscriptions: string[] = [];
+  private subscriptions = new Set<string>();
   private destroyed = false;
   private registered = false;
 
@@ -30,6 +30,7 @@ export class ComponentMailbox {
         ...this.metadata,
       });
       this.registered = true;
+      this.destroyed = false;
     }
 
     console.info(
@@ -129,12 +130,14 @@ export class ComponentMailbox {
     handler: (
       payload: TSchema[TAction] & { _replyTo?: string; _correlationId?: string }
     ) => void
-  ): string {
+  ): () => void {
     const listenerId = channel.subscribe(
       action,
       (payload, eventMetadata) => {
         // Ignore own messages
-        if (eventMetadata.emitterId === this.componentId) return;
+        if (eventMetadata.emitterId === this.componentId) {
+          return;
+        }
         handler(payload);
       },
       {
@@ -142,8 +145,8 @@ export class ComponentMailbox {
       }
     );
 
-    this.subscriptions.push(listenerId);
-    return listenerId;
+    this.subscriptions.add(listenerId);
+    return () => globalEventManager.unsubscribe(listenerId);
   }
 
   // Cleanup when component unmounts
@@ -154,7 +157,7 @@ export class ComponentMailbox {
     this.subscriptions.forEach((id) => {
       globalEventManager.unsubscribe(id);
     });
-    this.subscriptions = [];
+    this.subscriptions = new Set();
     if (this.registered) {
       globalEventManager.unregisterComponent(this.componentId);
       this.registered = false;

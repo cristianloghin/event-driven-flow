@@ -13,13 +13,6 @@ export interface SubscribeOptions<
   once?: boolean;
   filter?: (payload: TSchema[TAction]) => boolean;
   selector?: (payload: TSchema[TAction]) => TSelector;
-  /**
-   * When true (default), the EventManager will ensure only one active subscription
-   * per (componentId, eventName) pair. Re-subscribing updates the existing listener's
-   * callback/options instead of adding a new one. Set to false to allow multiple
-   * distinct subscriptions from the same component to the same event.
-   */
-  dedupe?: boolean;
 }
 
 export interface EventMetadata {

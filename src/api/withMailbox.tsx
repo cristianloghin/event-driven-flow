@@ -2,7 +2,7 @@ import { memo, useEffect, useRef } from "react";
 
 import { ComponentMailbox } from "../core/ComponentMailbox";
 
-export function withEvents(componentName: string, metadata = {}) {
+export function withMailbox(componentName: string, metadata = {}) {
   return function (
     Component: React.ComponentType<{ mailbox: ComponentMailbox }>
   ) {
@@ -25,8 +25,7 @@ export function withEvents(componentName: string, metadata = {}) {
       return <Component mailbox={mailboxRef.current} />;
     };
 
-    const MemoWrapped = memo(Wrapped);
-    MemoWrapped.displayName = componentName;
-    return MemoWrapped;
+    Wrapped.displayName = componentName;
+    return memo(Wrapped);
   };
 }

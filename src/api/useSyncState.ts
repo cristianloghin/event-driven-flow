@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ComponentMailbox } from "../core/ComponentMailbox";
 import { globalEventManager } from "../core/EventManager";
@@ -53,6 +53,7 @@ export function useSyncState<
       | ((prevState: TSelector) => TSelector | Partial<TSelector>)
   ) => void
 ] {
+  const previousState = useRef<TSelector | null>(null);
   const [state, setState] = useState<TSelector>(
     getInitialState(channel, action, options)
   );
@@ -78,7 +79,7 @@ export function useSyncState<
   }, []);
 
   useEffect(() => {
-    const subscription = mailbox.receive(channel, action, (payload) => {
+    const unsub = mailbox.receive(channel, action, (payload) => {
       const processedPayload = options?.selector
         ? options.selector(payload)
         : (payload as TSelector);
@@ -86,7 +87,7 @@ export function useSyncState<
     });
 
     return () => {
-      globalEventManager.unsubscribe(subscription);
+      unsub();
     };
   }, [mailbox, channel, action, options?.selector]);
 
@@ -97,11 +98,11 @@ export function useSyncState<
         | Partial<TSelector>
         | ((prevState: TSelector) => TSelector | Partial<TSelector>)
     ) => {
-      setState((currentState) => {
+      const result = (() => {
+        const currentState = previousState.current;
         let finalState: TSelector;
 
         if (typeof newValue === "function") {
-          // Function pattern: setUser(prev => ({ ...prev, name: 'Updated' }))
           const result = (newValue as Function)(currentState);
           finalState =
             typeof result === "object" &&
@@ -121,9 +122,12 @@ export function useSyncState<
           finalState = newValue as TSelector;
         }
 
-        mailbox.tell(channel, action, finalState);
         return finalState;
-      });
+      })();
+
+      setState(result);
+      previousState.current = result;
+      mailbox.tell(channel, action, result);
     },
     [mailbox, channel, action]
   );
