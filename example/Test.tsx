@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { createChannel, useSyncState, withEvents, withService } from "../src";
+import { createChannel, useSyncState, withMailbox, withService } from "../src";
 
 // Import the new debug tools
 import { EventManagerDebug } from "../src/dev-tools";
@@ -79,8 +79,8 @@ const orderDomain = createChannel<OrderChannelSchema>("order", {
   ],
 });
 
-const UserProfileComponent = withEvents("UserProfile", { domain: "user" })(
-  (mailbox) => {
+const UserProfileComponent = withMailbox("UserProfile", { domain: "user" })(
+  ({ mailbox }) => {
     const [user, setUser] = useSyncState(
       mailbox,
       userChannel,
@@ -170,118 +170,123 @@ const NotificationService = withService("NotificationService")((mailbox) => {
   });
 });
 
-const NotificationDisplay = withEvents("NotificationDisplay")((mailbox) => {
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+const NotificationDisplay = withMailbox("NotificationDisplay")(
+  ({ mailbox }) => {
+    const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
-  // Subscribe to app notifications
-  mailbox.receive(appDomain, "notification", (notification) => {
-    setNotifications((prev) => [notification, ...prev.slice(0, 4)]);
-  });
+    // Subscribe to app notifications
+    mailbox.receive(appDomain, "notification", (notification) => {
+      setNotifications((prev) => [notification, ...prev.slice(0, 4)]);
+    });
 
-  const clearNotifications = () => setNotifications([]);
+    const clearNotifications = () => setNotifications([]);
 
-  return (
-    <div className="p-4 border rounded-lg bg-yellow-50">
-      <div className="flex justify-between items-center mb-2">
-        <h3 className="font-bold text-lg">Notifications</h3>
-        <button
-          onClick={clearNotifications}
-          className="text-sm px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600"
-        >
-          Clear
-        </button>
+    return (
+      <div className="p-4 border rounded-lg bg-yellow-50">
+        <div className="flex justify-between items-center mb-2">
+          <h3 className="font-bold text-lg">Notifications</h3>
+          <button
+            onClick={clearNotifications}
+            className="text-sm px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+          >
+            Clear
+          </button>
+        </div>
+        {notifications.length > 0 ? (
+          <div className="space-y-2">
+            {notifications.map((notif) => (
+              <div
+                key={notif.id}
+                className="p-2 bg-white rounded border-l-4 border-yellow-400"
+              >
+                <p className="text-sm">{notif.message}</p>
+                <p className="text-xs text-gray-500">{notif.timestamp}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-500">No notifications</p>
+        )}
       </div>
-      {notifications.length > 0 ? (
+    );
+  }
+);
+
+const OrderManager = withMailbox<{ id: number }>("OrderManager")(
+  ({ mailbox, ctx }) => {
+    const context = ctx?.();
+    const [orders, setOrders] = useState([
+      { id: "1", status: "pending", total: 99.99 },
+      { id: "2", status: "shipped", total: 149.99 },
+    ]);
+
+    // Subscribe to order updates
+    mailbox.receive(orderDomain, "statusUpdated", (payload) => {
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.id === payload.orderId
+            ? { ...order, status: payload.status }
+            : order
+        )
+      );
+    });
+
+    const updateOrderStatus = (orderId: string, newStatus: OrderStatus) => {
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.id === orderId ? { ...order, status: newStatus } : order
+        )
+      );
+
+      mailbox.tell(orderDomain, "statusUpdated", {
+        orderId,
+        status: newStatus,
+        timestamp: Date.now(),
+      });
+    };
+
+    return (
+      <div className="p-4 border rounded-lg bg-green-50">
+        <h3 className="font-bold text-lg mb-2">Order Manager</h3>
         <div className="space-y-2">
-          {notifications.map((notif) => (
+          {orders.map((order) => (
             <div
-              key={notif.id}
-              className="p-2 bg-white rounded border-l-4 border-yellow-400"
+              key={order.id}
+              className="flex justify-between items-center p-2 bg-white rounded"
             >
-              <p className="text-sm">{notif.message}</p>
-              <p className="text-xs text-gray-500">{notif.timestamp}</p>
+              <div>
+                <span className="font-semibold">Order #{order.id}</span>
+                <span className="ml-2 text-gray-600">${order.total}</span>
+                <span
+                  className={`ml-2 px-2 py-1 rounded text-xs ${
+                    order.status === "pending"
+                      ? "bg-yellow-200"
+                      : order.status === "shipped"
+                      ? "bg-blue-200"
+                      : "bg-green-200"
+                  }`}
+                >
+                  {order.status}
+                </span>
+              </div>
+              <select
+                value={order.status}
+                onChange={(e) =>
+                  updateOrderStatus(order.id, e.target.value as OrderStatus)
+                }
+                className="text-sm border rounded px-2 py-1"
+              >
+                <option value="pending">Pending</option>
+                <option value="shipped">Shipped</option>
+                <option value="delivered">Delivered</option>
+              </select>
             </div>
           ))}
         </div>
-      ) : (
-        <p className="text-gray-500">No notifications</p>
-      )}
-    </div>
-  );
-});
-
-const OrderManager = withEvents("OrderManager")((mailbox) => {
-  const [orders, setOrders] = useState([
-    { id: "1", status: "pending", total: 99.99 },
-    { id: "2", status: "shipped", total: 149.99 },
-  ]);
-
-  // Subscribe to order updates
-  mailbox.receive(orderDomain, "statusUpdated", (payload) => {
-    setOrders((prev) =>
-      prev.map((order) =>
-        order.id === payload.orderId
-          ? { ...order, status: payload.status }
-          : order
-      )
-    );
-  });
-
-  const updateOrderStatus = (orderId: string, newStatus: OrderStatus) => {
-    setOrders((prev) =>
-      prev.map((order) =>
-        order.id === orderId ? { ...order, status: newStatus } : order
-      )
-    );
-
-    mailbox.tell(orderDomain, "statusUpdated", {
-      orderId,
-      status: newStatus,
-      timestamp: Date.now(),
-    });
-  };
-
-  return (
-    <div className="p-4 border rounded-lg bg-green-50">
-      <h3 className="font-bold text-lg mb-2">Order Manager</h3>
-      <div className="space-y-2">
-        {orders.map((order) => (
-          <div
-            key={order.id}
-            className="flex justify-between items-center p-2 bg-white rounded"
-          >
-            <div>
-              <span className="font-semibold">Order #{order.id}</span>
-              <span className="ml-2 text-gray-600">${order.total}</span>
-              <span
-                className={`ml-2 px-2 py-1 rounded text-xs ${
-                  order.status === "pending"
-                    ? "bg-yellow-200"
-                    : order.status === "shipped"
-                    ? "bg-blue-200"
-                    : "bg-green-200"
-                }`}
-              >
-                {order.status}
-              </span>
-            </div>
-            <select
-              value={order.status}
-              onChange={(e) =>
-                updateOrderStatus(order.id, e.target.value as OrderStatus)
-              }
-              className="text-sm border rounded px-2 py-1"
-            >
-              <option value="pending">Pending</option>
-              <option value="shipped">Shipped</option>
-              <option value="delivered">Delivered</option>
-            </select>
-          </div>
-        ))}
       </div>
-    </div>
-  );
-});
+    );
+  }
+);
 
 export const EventDrivenArchitectureDemo = () => {
   const [showProfile, setShowProfile] = useState(false);
@@ -307,7 +312,7 @@ export const EventDrivenArchitectureDemo = () => {
       {/* UI Components */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {showProfile && <UserProfileComponent />}
-        <OrderManager />
+        <OrderManager ctx={() => ({ id: 90 })} />
         <NotificationDisplay />
       </div>
       <div>

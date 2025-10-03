@@ -2,11 +2,18 @@ import { memo, useEffect, useRef } from "react";
 
 import { ComponentMailbox } from "../core/ComponentMailbox";
 
-export function withMailbox(componentName: string, metadata = {}) {
+export function withMailbox<P extends Record<string, unknown>>(
+  componentName: string,
+  metadata = {}
+) {
   return function (
-    Component: React.ComponentType<{ mailbox: ComponentMailbox }>
+    Component: React.ComponentType<
+      P & {
+        mailbox: ComponentMailbox;
+      }
+    >
   ) {
-    const Wrapped = () => {
+    const Wrapped = (props: P) => {
       const mailboxRef = useRef<ComponentMailbox | null>(null);
 
       if (!mailboxRef.current) {
@@ -22,7 +29,7 @@ export function withMailbox(componentName: string, metadata = {}) {
         };
       }, []);
 
-      return <Component mailbox={mailboxRef.current} />;
+      return <Component {...props} mailbox={mailboxRef.current} />;
     };
 
     Wrapped.displayName = componentName;
