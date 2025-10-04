@@ -2,6 +2,7 @@ import { globalEventManager } from "./EventManager";
 import {
   ActionState,
   ChannelSchema,
+  ComponentMailboxInterface,
   EventMetadata,
   StringKey,
   TypedChannel,

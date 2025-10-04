@@ -68,3 +68,47 @@ export interface TypedChannel<TSchema extends ChannelSchema> {
     options?: SubscribeOptions<TSchema, TAction>
   ): string;
 }
+
+export type SyncStateFn = <
+  TSchema extends ChannelSchema,
+  TAction extends StringKey<TSchema>
+>(
+  channel: TypedChannel<TSchema>,
+  action: TAction,
+  options?: {
+    initialValue?: TSchema[TAction];
+    restoreOnMount?: boolean;
+  }
+) => [
+  TSchema[TAction],
+  (
+    newValue:
+      | TSchema[TAction]
+      | ((prevState: TSchema[TAction]) => TSchema[TAction])
+  ) => void
+];
+
+export interface ComponentMailboxInterface {
+  tell<TSchema extends ChannelSchema, TAction extends StringKey<TSchema>>(
+    channel: TypedChannel<TSchema>,
+    action: TAction,
+    payload: TSchema[TAction]
+  ): void;
+
+  ask<
+    TSchema extends ChannelSchema,
+    TAction extends StringKey<TSchema>,
+    TResponse extends ActionState = ActionState
+  >(
+    channel: TypedChannel<TSchema>,
+    action: TAction,
+    payload: TSchema[TAction],
+    timeout?: number
+  ): Promise<TResponse>;
+
+  receive<TSchema extends ChannelSchema, TAction extends StringKey<TSchema>>(
+    channel: TypedChannel<TSchema>,
+    action: TAction,
+    handler: (payload: TSchema[TAction], metadata: EventMetadata) => void
+  ): void;
+}

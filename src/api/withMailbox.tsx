@@ -2,7 +2,8 @@ import { memo, useEffect, useRef } from "react";
 
 import { ComponentMailbox } from "../core/ComponentMailbox";
 import { createSyncState } from "./createSyncState";
-import { ChannelSchema, StringKey, TypedChannel } from "../types";
+import { ComponentMailboxInterface, SyncStateFn } from "../types";
+import { createMailboxReceive } from "./createMailboxReceive";
 
 export function withMailbox<P extends Record<string, unknown>>(
   componentName: string,
@@ -11,25 +12,8 @@ export function withMailbox<P extends Record<string, unknown>>(
   return function (
     Component: React.ComponentType<
       P & {
-        mailbox: ComponentMailbox;
-        syncState: <
-          TSchema extends ChannelSchema,
-          TAction extends StringKey<TSchema>
-        >(
-          channel: TypedChannel<TSchema>,
-          action: TAction,
-          options?: {
-            initialValue?: TSchema[TAction];
-            restoreOnMount?: boolean;
-          }
-        ) => [
-          TSchema[TAction],
-          (
-            newValue:
-              | TSchema[TAction]
-              | ((prevState: TSchema[TAction]) => TSchema[TAction])
-          ) => void
-        ];
+        mailbox: ComponentMailboxInterface;
+        syncState: SyncStateFn;
       }
     >
   ) {
@@ -49,10 +33,16 @@ export function withMailbox<P extends Record<string, unknown>>(
         };
       }, []);
 
+      const mailbox: ComponentMailboxInterface = {
+        tell: mailboxRef.current.tell,
+        ask: mailboxRef.current.ask,
+        receive: createMailboxReceive(mailboxRef.current),
+      };
+
       return (
         <Component
           {...props}
-          mailbox={mailboxRef.current}
+          mailbox={mailbox}
           syncState={createSyncState(mailboxRef.current)}
         />
       );
