@@ -1,4 +1,3 @@
-export * from "./api/useSyncState";
 export * from "./api/createChannel";
 export * from "./api/withMailbox";
 export * from "./api/withService";

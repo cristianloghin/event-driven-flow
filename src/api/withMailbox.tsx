@@ -1,6 +1,8 @@
 import { memo, useEffect, useRef } from "react";
 
 import { ComponentMailbox } from "../core/ComponentMailbox";
+import { createSyncState } from "./createSyncState";
+import { ChannelSchema, StringKey, TypedChannel } from "../types";
 
 export function withMailbox<P extends Record<string, unknown>>(
   componentName: string,
@@ -10,6 +12,24 @@ export function withMailbox<P extends Record<string, unknown>>(
     Component: React.ComponentType<
       P & {
         mailbox: ComponentMailbox;
+        syncState: <
+          TSchema extends ChannelSchema,
+          TAction extends StringKey<TSchema>
+        >(
+          channel: TypedChannel<TSchema>,
+          action: TAction,
+          options?: {
+            initialValue?: TSchema[TAction];
+            restoreOnMount?: boolean;
+          }
+        ) => [
+          TSchema[TAction],
+          (
+            newValue:
+              | TSchema[TAction]
+              | ((prevState: TSchema[TAction]) => TSchema[TAction])
+          ) => void
+        ];
       }
     >
   ) {
@@ -29,7 +49,13 @@ export function withMailbox<P extends Record<string, unknown>>(
         };
       }, []);
 
-      return <Component {...props} mailbox={mailboxRef.current} />;
+      return (
+        <Component
+          {...props}
+          mailbox={mailboxRef.current}
+          syncState={createSyncState(mailboxRef.current)}
+        />
+      );
     };
 
     Wrapped.displayName = componentName;
