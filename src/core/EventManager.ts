@@ -52,14 +52,13 @@ export class EventManager {
   }
 
   // Channel subscription with advanced features
-  subscribe<
-    TSchema extends ChannelSchema,
-    TAction extends StringKey<TSchema>,
-    TSelector extends TSchema[TAction] = TSchema[TAction]
-  >(
+  subscribe<TSchema extends ChannelSchema, TAction extends StringKey<TSchema>>(
     eventName: string,
-    callback: (payload: TSelector, eventMetadata: EventMetadata) => void,
-    options: SubscribeOptions<TSchema, TAction, TSelector> = {}
+    callback: (
+      payload: TSchema[TAction],
+      eventMetadata?: EventMetadata
+    ) => void,
+    options: SubscribeOptions<TSchema, TAction> = {}
   ) {
     // Generate random listener ID
     const listenerId = Math.random().toString(36).substring(2, 15);
@@ -68,12 +67,11 @@ export class EventManager {
       this.events.set(eventName, new Set());
     }
 
-    const listenerInfo: ListenerInfo<TSchema, TAction, TSelector> = {
+    const listenerInfo: ListenerInfo<TSchema, TAction> = {
       id: listenerId,
       callback,
       once: options.once || false,
       filter: options.filter,
-      selector: options.selector,
       componentId: options.componentId,
     };
 
@@ -107,11 +105,11 @@ export class EventManager {
   }
 
   // Event emission with correlation tracking
-  emit<
-    TSchema extends ChannelSchema,
-    TAction extends StringKey<TSchema>,
-    TSelector extends TSchema[TAction] = TSchema[TAction]
-  >(eventName: string, payload: TSelector, options: EventMetadata = {}) {
+  emit<TSchema extends ChannelSchema, TAction extends StringKey<TSchema>>(
+    eventName: string,
+    payload: TSchema[TAction],
+    options: EventMetadata = {}
+  ) {
     const event = this.events.get(eventName);
     if (!event) return;
 
@@ -147,33 +145,21 @@ export class EventManager {
       payload
     );
 
-    const listenersToRemove: ListenerInfo<TSchema, TAction, TSelector>[] = [];
+    const listenersToRemove: ListenerInfo<TSchema, TAction>[] = [];
 
     event.forEach((listenerInfo) => {
       const typedListener = listenerInfo as unknown as ListenerInfo<
         TSchema,
-        TAction,
-        TSelector
+        TAction
       >;
-      const { callback, once, filter, selector } = typedListener;
+      const { callback, once, filter } = typedListener;
 
       // Apply filter if provided
       if (filter && !filter(payload)) return;
 
-      // Apply selector if provided
-      let processedPayload = payload;
-      if (selector) {
-        try {
-          processedPayload = selector(payload);
-        } catch (error) {
-          console.error(`Selector error for ${eventName}:`, error);
-          return;
-        }
-      }
-
       // Call the callback
       try {
-        callback(processedPayload, eventMetadata);
+        callback(payload, eventMetadata);
       } catch (error) {
         console.error(
           `Error in event listener for channel "${eventName}":`,

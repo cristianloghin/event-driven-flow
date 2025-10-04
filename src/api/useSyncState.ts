@@ -6,128 +6,88 @@ import { ChannelSchema, StringKey, TypedChannel } from "../types";
 
 function getInitialState<
   TSchema extends ChannelSchema,
-  TAction extends StringKey<TSchema>,
-  TSelector extends TSchema[TAction] = TSchema[TAction]
+  TAction extends StringKey<TSchema>
 >(
   channel: TypedChannel<TSchema>,
   action: TAction,
-  options?: {
-    initialValue?: TSelector;
-    selector?: (state: TSchema[TAction]) => TSelector;
-  }
+  initialValue?: TSchema[TAction]
 ) {
-  if (options?.initialValue !== undefined) {
-    return options.initialValue;
+  if (initialValue !== undefined) {
+    return initialValue;
   }
 
   if (channel.initialState) {
-    if (options?.selector) {
-      return options.selector(channel.initialState[action]);
-    }
-
-    return channel.initialState[action] as TSelector;
+    return channel.initialState[action];
   }
 
-  return {} as TSelector;
+  return {} as TSchema[TAction];
 }
 
 export function useSyncState<
   TSchema extends ChannelSchema,
-  TAction extends StringKey<TSchema>,
-  TSelector extends TSchema[TAction] = TSchema[TAction]
+  TAction extends StringKey<TSchema>
 >(
   mailbox: ComponentMailbox,
   channel: TypedChannel<TSchema>,
   action: TAction,
   options?: {
-    initialValue?: TSelector;
+    initialValue?: TSchema[TAction];
     restoreOnMount?: boolean;
-    selector?: (state: TSchema[TAction]) => TSelector;
   }
 ): [
-  TSelector,
+  TSchema[TAction],
   (
     newValue:
-      | TSelector
-      | Partial<TSelector>
-      | ((prevState: TSelector) => TSelector | Partial<TSelector>)
+      | TSchema[TAction]
+      | ((prevState: TSchema[TAction]) => TSchema[TAction])
   ) => void
 ] {
-  const previousState = useRef<TSelector | null>(null);
-  const [state, setState] = useState<TSelector>(
-    getInitialState(channel, action, options)
+  const stateRef = useRef<TSchema[TAction]>(
+    getInitialState(channel, action, options?.initialValue)
   );
+  const [state, setState] = useState<TSchema[TAction]>(stateRef.current);
   const { restoreOnMount = false } = options || {};
 
   useEffect(() => {
     if (restoreOnMount) {
       const lastPayload = globalEventManager.getLastPayload(channel, action);
 
-      let restoredValue: TSelector | undefined;
-
       if (lastPayload) {
-        restoredValue = options?.selector
-          ? options.selector(lastPayload)
-          : (lastPayload as TSelector);
         console.info(
           `♻️ Restored value for ${channel.name}.${action}:`,
-          restoredValue
+          lastPayload
         );
-        setState(restoredValue);
+        setState(lastPayload);
+        stateRef.current = lastPayload;
       }
     }
   }, []);
 
   useEffect(() => {
     const unsub = mailbox.receive(channel, action, (payload) => {
-      const processedPayload = options?.selector
-        ? options.selector(payload)
-        : (payload as TSelector);
-      setState(processedPayload);
+      setState(payload);
+      stateRef.current = payload;
     });
 
     return () => {
       unsub();
     };
-  }, [mailbox, channel, action, options?.selector]);
+  }, [mailbox, channel, action]);
 
   const updateState = useCallback(
     (
       newValue:
-        | TSelector
-        | Partial<TSelector>
-        | ((prevState: TSelector) => TSelector | Partial<TSelector>)
+        | TSchema[TAction]
+        | ((prevState: TSchema[TAction]) => TSchema[TAction])
     ) => {
-      const result = (() => {
-        const currentState = previousState.current;
-        let finalState: TSelector;
+      const finalState =
+        typeof newValue === "function"
+          ? (newValue as Function)(stateRef.current)
+          : newValue;
 
-        if (typeof newValue === "function") {
-          const result = (newValue as Function)(currentState);
-          finalState =
-            typeof result === "object" &&
-            result !== null &&
-            !Array.isArray(result)
-              ? ({ ...currentState, ...result } as TSelector) // Partial update
-              : (result as TSelector); // Full replacement
-        } else if (
-          typeof newValue === "object" &&
-          newValue !== null &&
-          !Array.isArray(newValue)
-        ) {
-          // Partial object pattern: setUser({ name: 'Updated' })
-          finalState = { ...currentState, ...newValue } as TSelector;
-        } else {
-          // Full value pattern: setUser(newUser)
-          finalState = newValue as TSelector;
-        }
-
-        return finalState;
-      })();
-
-      setState(result);
-      previousState.current = result;
-      mailbox.tell(channel, action, result);
+      setState(finalState);
+      stateRef.current = finalState;
+      mailbox.tell(channel, action, finalState);
     },
     [mailbox, channel, action]
   );

@@ -1,18 +1,16 @@
 export type StringKey<T> = keyof T extends string ? keyof T : never;
 export type ActionState = Record<string, unknown>;
 export type ChannelSchema = {
-  [action: string]: ActionState;
+  [action: string]: unknown;
 };
 
 export interface SubscribeOptions<
   TSchema extends ChannelSchema,
-  TAction extends StringKey<TSchema>,
-  TSelector extends TSchema[TAction]
+  TAction extends StringKey<TSchema>
 > {
   componentId?: string;
   once?: boolean;
   filter?: (payload: TSchema[TAction]) => boolean;
-  selector?: (payload: TSchema[TAction]) => TSelector;
 }
 
 export interface EventMetadata {
@@ -21,6 +19,7 @@ export interface EventMetadata {
   correlationId?: string; // Unique ID for this event
   ancestorIds?: Set<string>; // Chain of event IDs (loop detection)
   emitterId?: string;
+  replyTo?: string;
 }
 
 export type ChannelMiddleware<TSchema extends ChannelSchema> = <
@@ -46,14 +45,12 @@ export interface ComponentMetadata {
 
 export interface ListenerInfo<
   TSchema extends ChannelSchema = ChannelSchema,
-  TAction extends StringKey<TSchema> = StringKey<TSchema>,
-  TSelector extends TSchema[TAction] = TSchema[TAction]
+  TAction extends StringKey<TSchema> = StringKey<TSchema>
 > {
   id: string;
-  callback: (payload: TSelector, eventMetadata: EventMetadata) => void;
+  callback: (payload: TSchema[TAction], eventMetadata: EventMetadata) => void;
   once: boolean;
   filter?: (payload: TSchema[TAction]) => boolean;
-  selector?: (payload: TSchema[TAction]) => TSelector;
   componentId?: string;
 }
 
@@ -65,12 +62,9 @@ export interface TypedChannel<TSchema extends ChannelSchema> {
     payload: TSchema[TAction],
     options?: EventMetadata
   ): void;
-  subscribe<
-    TAction extends StringKey<TSchema>,
-    TSelector extends TSchema[TAction] = TSchema[TAction]
-  >(
+  subscribe<TAction extends StringKey<TSchema>>(
     action: TAction,
-    callback: (payload: TSelector, eventMetadata: EventMetadata) => void,
-    options?: SubscribeOptions<TSchema, TAction, TSelector>
+    callback: (payload: TSchema[TAction], eventMetadata: EventMetadata) => void,
+    options?: SubscribeOptions<TSchema, TAction>
   ): string;
 }

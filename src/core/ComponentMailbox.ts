@@ -1,5 +1,11 @@
 import { globalEventManager } from "./EventManager";
-import { ActionState, ChannelSchema, StringKey, TypedChannel } from "../types";
+import {
+  ActionState,
+  ChannelSchema,
+  EventMetadata,
+  StringKey,
+  TypedChannel,
+} from "../types";
 
 export class ComponentMailbox {
   private componentId: string;
@@ -88,9 +94,9 @@ export class ComponentMailbox {
 
       listenerId = globalEventManager.subscribe(
         replyChannel,
-        (response: TResponse) => {
+        (response) => {
           cleanup();
-          resolve(response);
+          resolve(response as TResponse);
         },
         {
           componentId: this.componentId,
@@ -99,17 +105,11 @@ export class ComponentMailbox {
       );
 
       // Send request with reply information
-      channel.emit(
-        action,
-        {
-          ...payload,
-          _replyTo: replyChannel,
-          _correlationId: correlationId,
-        } as TSchema[TAction],
-        {
-          emitterId: this.componentId,
-        }
-      );
+      channel.emit(action, payload as TSchema[TAction], {
+        emitterId: this.componentId,
+        replyTo: replyChannel,
+        correlationId: correlationId,
+      });
     });
   }
 
@@ -127,9 +127,7 @@ export class ComponentMailbox {
   receive<TSchema extends ChannelSchema, TAction extends StringKey<TSchema>>(
     channel: TypedChannel<TSchema>,
     action: TAction,
-    handler: (
-      payload: TSchema[TAction] & { _replyTo?: string; _correlationId?: string }
-    ) => void
+    handler: (payload: TSchema[TAction], metadata: EventMetadata) => void
   ): () => void {
     const listenerId = channel.subscribe(
       action,
@@ -138,7 +136,7 @@ export class ComponentMailbox {
         if (eventMetadata.emitterId === this.componentId) {
           return;
         }
-        handler(payload);
+        handler(payload, eventMetadata);
       },
       {
         componentId: this.componentId,

@@ -55,13 +55,13 @@ function createChannel<TSchema extends ChannelSchema>(
     },
 
     // Subscribe to specific action
-    subscribe<
-      TAction extends StringKey<TSchema>,
-      TSelector extends TSchema[TAction] = TSchema[TAction]
-    >(
+    subscribe<TAction extends StringKey<TSchema>>(
       action: TAction,
-      callback: (payload: TSelector, eventMetadata: EventMetadata) => void,
-      options: SubscribeOptions<TSchema, TAction, TSelector> = {}
+      callback: (
+        payload: TSchema[TAction],
+        eventMetadata?: EventMetadata
+      ) => void,
+      options: SubscribeOptions<TSchema, TAction> = {}
     ) {
       const eventName = `${channelName}.${action}`;
       return globalEventManager.subscribe(eventName, callback, options);
