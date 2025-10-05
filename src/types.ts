@@ -54,8 +54,11 @@ export interface ListenerInfo<
   componentId?: string;
 }
 
-export interface TypedChannel<TSchema extends ChannelSchema> {
-  name: string;
+export interface TypedChannel<
+  TSchema extends ChannelSchema,
+  TName extends string = string
+> {
+  name: TName;
   initialState: TSchema;
   emit<TAction extends StringKey<TSchema>>(
     action: TAction,

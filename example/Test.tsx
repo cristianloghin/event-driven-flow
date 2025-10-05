@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { createChannel, useSyncState, withMailbox, withService } from "../src";
+import { createChannel, withChannel, withMailbox, withService } from "../src";
 
 // Import the new debug tools
 import { EventManagerDebug } from "../src/dev-tools";
@@ -44,9 +44,9 @@ type AppChannel = {
 };
 
 // Create typed channels
-const appDomain = createChannel<AppChannel>("app", {});
+const appDomain = createChannel<AppChannel>({})("app");
 
-const userChannel = createChannel<UserChannelSchema>("user", {
+const userChannel = createChannel<UserChannelSchema>({
   initialState: {
     profileChanged: {
       name: "Loading...",
@@ -68,35 +68,39 @@ const userChannel = createChannel<UserChannelSchema>("user", {
       }
     },
   ],
-});
+})("user");
 
-const orderDomain = createChannel<OrderChannelSchema>("order", {
+const orderDomain = createChannel<OrderChannelSchema>({
   middleware: [
     (payload, action) => {
       console.info(`📦 Order domain: ${action}`, payload);
       return payload;
     },
   ],
-});
+})("order");
+
+type CompyProps = {
+  mike: number;
+  norris?: string;
+};
+
+const Compy = withChannel("Compis", [userChannel, orderDomain])<CompyProps>(
+  function Compisen({ user, order, mike, norris }) {
+    user.receive("statusChanged", (p) => console.info(p));
+    user.tell("profileChanged", { name: "Bo", email: "bo@bo.com" });
+
+    return <></>;
+  }
+);
 
 const UserProfileComponent = withMailbox("UserProfile", { domain: "user" })(
-  ({ mailbox }) => {
-    const [user, setUser] = useSyncState(
-      mailbox,
-      userChannel,
-      "profileChanged",
-      {
-        restoreOnMount: true,
-      }
-    );
-    const [status, setStatus] = useSyncState(
-      mailbox,
-      userChannel,
-      "statusChanged",
-      {
-        restoreOnMount: true,
-      }
-    );
+  ({ mailbox, syncState }) => {
+    const [user, setUser] = syncState(userChannel, "profileChanged", {
+      restoreOnMount: true,
+    });
+    const [status, setStatus] = syncState(userChannel, "statusChanged", {
+      restoreOnMount: true,
+    });
 
     // Simulate API call
     useEffect(() => {
@@ -166,7 +170,7 @@ const NotificationService = withService("NotificationService")((mailbox) => {
     };
 
     // Emit notification event for other components
-    mailbox.tell(appDomain, "notification", notification);
+    mailbox.tell(appDomain)("notification", notification);
   });
 });
 
@@ -213,8 +217,7 @@ const NotificationDisplay = withMailbox("NotificationDisplay")(
 );
 
 const OrderManager = withMailbox<{ id: number }>("OrderManager")(
-  ({ mailbox, ctx }) => {
-    const context = ctx?.();
+  ({ mailbox }) => {
     const [orders, setOrders] = useState([
       { id: "1", status: "pending", total: 99.99 },
       { id: "2", status: "shipped", total: 149.99 },
@@ -312,7 +315,7 @@ export const EventDrivenArchitectureDemo = () => {
       {/* UI Components */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {showProfile && <UserProfileComponent />}
-        <OrderManager ctx={() => ({ id: 90 })} />
+        <OrderManager id={12} />
         <NotificationDisplay />
       </div>
       <div>
