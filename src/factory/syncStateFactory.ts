@@ -3,7 +3,8 @@ import { ChannelSchema, StringKey, TypedChannel } from "../types";
 import { globalEventManager } from "../core/EventManager";
 
 export function syncStateFactory<TSchema extends ChannelSchema>(
-  channel: TypedChannel<TSchema>
+  channel: TypedChannel<TSchema>,
+  componentId: string
 ) {
   return function useSyncState<TAction extends StringKey<TSchema>>(
     action: TAction,
@@ -64,7 +65,7 @@ export function syncStateFactory<TSchema extends ChannelSchema>(
 
         setState(finalState);
         stateRef.current = finalState;
-        channel.emit(action, finalState);
+        channel.emit(action, finalState, { emitterId: componentId });
       },
       [channel, action]
     );

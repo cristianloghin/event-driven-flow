@@ -12,6 +12,7 @@ export function replyFactory<TSchema extends ChannelSchema>(
   ) {
     useEffect(() => {
       const listenerId = channel.subscribe(action, (p, m) => {
+        if (m.emitterId === componentId) return;
         if (m.replyTo) {
           const response = cb(p);
           globalEventManager.emit(m.replyTo, response, {

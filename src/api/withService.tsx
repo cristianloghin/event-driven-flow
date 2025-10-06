@@ -32,7 +32,7 @@ export function withService<
             receive: receiveFactory(componentIdRef.current, ch),
             ask: askFactory(componentIdRef.current, ch, subscriptionsRef),
             reply: replyFactory(ch, componentIdRef.current),
-            syncState: syncStateFactory(ch),
+            syncState: syncStateFactory(ch, componentIdRef.current),
           };
           wrappedChannelsRef.current[ch.name] = channel;
         });
@@ -51,6 +51,11 @@ export function withService<
           );
           globalEventManager.unregisterComponent(componentIdRef.current);
         };
+      }, []);
+
+      useEffect(() => {
+        const cleanup = ServiceFn(wrappedChannelsRef.current as any);
+        return cleanup;
       }, []);
 
       return null;

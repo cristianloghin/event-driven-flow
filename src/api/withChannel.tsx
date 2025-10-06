@@ -33,7 +33,7 @@ export function withChannel<
             receive: receiveFactory(componentIdRef.current, ch),
             ask: askFactory(componentIdRef.current, ch, subscriptionsRef),
             reply: replyFactory(ch, componentIdRef.current),
-            syncState: syncStateFactory(ch),
+            syncState: syncStateFactory(ch, componentIdRef.current),
           };
           wrappedChannelsRef.current[ch.name] = channel;
         });
