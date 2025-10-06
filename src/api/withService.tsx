@@ -8,6 +8,7 @@ import {
   tellFactory,
 } from "../factory";
 import { globalEventManager } from "../core/EventManager";
+import { useChannelActor } from "../hooks/useChannelActor";
 
 // Helper component that calls the function and returns null
 export function withService<
@@ -21,40 +22,9 @@ export function withService<
     }) => void | (() => void)
   ) {
     const Wrapped = () => {
-      const componentIdRef = useRef(crypto.randomUUID());
-      const subscriptionsRef = useRef<Set<string>>(new Set());
-      const wrappedChannelsRef = useRef<Record<string, unknown>>({});
-
-      if (Object.keys(wrappedChannelsRef.current).length === 0) {
-        channels.forEach((ch) => {
-          const channel = {
-            tell: tellFactory(componentIdRef.current, ch),
-            receive: receiveFactory(componentIdRef.current, ch),
-            ask: askFactory(componentIdRef.current, ch, subscriptionsRef),
-            reply: replyFactory(ch, componentIdRef.current),
-            syncState: syncStateFactory(ch, componentIdRef.current),
-          };
-          wrappedChannelsRef.current[ch.name] = channel;
-        });
-      }
-
+      const channelProps = useChannelActor(serviceName, channels, metadata);
       useEffect(() => {
-        globalEventManager.registerComponent(componentIdRef.current, {
-          name: serviceName,
-          registeredAt: Date.now(),
-          ...metadata,
-        });
-
-        return () => {
-          subscriptionsRef.current.forEach((id) =>
-            globalEventManager.unsubscribe(id)
-          );
-          globalEventManager.unregisterComponent(componentIdRef.current);
-        };
-      }, []);
-
-      useEffect(() => {
-        const cleanup = ServiceFn(wrappedChannelsRef.current as any);
+        const cleanup = ServiceFn(channelProps);
         return cleanup;
       }, []);
 

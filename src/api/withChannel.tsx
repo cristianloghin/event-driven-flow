@@ -1,13 +1,6 @@
-import { memo, useEffect, useRef } from "react";
+import { memo } from "react";
 import { ChannelAPI, ChannelSchema, TypedChannel } from "../types";
-import { globalEventManager } from "../core/EventManager";
-import {
-  askFactory,
-  receiveFactory,
-  replyFactory,
-  syncStateFactory,
-  tellFactory,
-} from "../factory";
+import { useChannelActor } from "../hooks/useChannelActor";
 
 export function withChannel<
   const TChannels extends readonly TypedChannel<ChannelSchema>[]
@@ -22,48 +15,8 @@ export function withChannel<
     >
   ) {
     const Wrapped = (props: P) => {
-      const componentIdRef = useRef(crypto.randomUUID());
-      const subscriptionsRef = useRef<Set<string>>(new Set());
-      const wrappedChannelsRef = useRef<Record<string, unknown>>({});
-
-      if (Object.keys(wrappedChannelsRef.current).length === 0) {
-        channels.forEach((ch) => {
-          const channel = {
-            tell: tellFactory(componentIdRef.current, ch),
-            receive: receiveFactory(componentIdRef.current, ch),
-            ask: askFactory(componentIdRef.current, ch, subscriptionsRef),
-            reply: replyFactory(ch, componentIdRef.current),
-            syncState: syncStateFactory(ch, componentIdRef.current),
-          };
-          wrappedChannelsRef.current[ch.name] = channel;
-        });
-      }
-
-      useEffect(() => {
-        globalEventManager.registerComponent(componentIdRef.current, {
-          name: componentName,
-          registeredAt: Date.now(),
-          ...metadata,
-        });
-
-        return () => {
-          subscriptionsRef.current.forEach((id) =>
-            globalEventManager.unsubscribe(id)
-          );
-          globalEventManager.unregisterComponent(componentIdRef.current);
-        };
-      }, []);
-
-      return (
-        <Component
-          {...props}
-          {...(wrappedChannelsRef.current as {
-            [K in TChannels[number]["name"]]: ChannelAPI<
-              Extract<TChannels[number], { name: K }>["initialState"]
-            >;
-          })}
-        />
-      );
+      const channelProps = useChannelActor(componentName, channels, metadata);
+      return <Component {...props} {...channelProps} />;
     };
 
     Wrapped.displayName = componentName;
