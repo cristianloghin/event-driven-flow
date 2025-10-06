@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { createChannel, withChannel, withMailbox, withService } from "../src";
+import { createChannel, withChannel, withService } from "../src";
 
 // Import the new debug tools
 import { EventManagerDebug } from "../src/dev-tools";
@@ -85,20 +85,22 @@ type CompyProps = {
 };
 
 const Compy = withChannel("Compis", [userChannel, orderDomain])<CompyProps>(
-  function Compisen({ user, order, mike, norris }) {
-    user.receive("statusChanged", (p) => console.info(p));
-    user.tell("profileChanged", { name: "Bo", email: "bo@bo.com" });
+  function Compisen({ user: userChannel }) {
+    userChannel.reply("statusChanged", (p) => {
+      return { isValid: p.status === "online" };
+    });
+    userChannel.tell("profileChanged", { name: "Bo", email: "bo@bo.com" });
 
     return <></>;
   }
 );
 
-const UserProfileComponent = withMailbox("UserProfile", { domain: "user" })(
-  ({ mailbox, syncState }) => {
-    const [user, setUser] = syncState(userChannel, "profileChanged", {
+const UserProfileComponent = withChannel("UserProfile", [userChannel])(
+  ({ user: userChannel }) => {
+    const [user, setUser] = userChannel.syncState("profileChanged", {
       restoreOnMount: true,
     });
-    const [status, setStatus] = syncState(userChannel, "statusChanged", {
+    const [status, setStatus] = userChannel.syncState("statusChanged", {
       restoreOnMount: true,
     });
 
@@ -159,9 +161,12 @@ const UserProfileComponent = withMailbox("UserProfile", { domain: "user" })(
   }
 );
 
-const NotificationService = withService("NotificationService")((mailbox) => {
+const NotificationService = withService("NotificationService", [
+  appDomain,
+  userChannel,
+])(({ app: appChannel, user: userChannel }) => {
   // Listen to user status changes
-  mailbox.receive(userChannel, "statusChanged", (payload) => {
+  userChannel.receive("statusChanged", (payload) => {
     const notification = {
       id: Date.now(),
       message: `User status changed to ${payload.status}`,
@@ -170,16 +175,16 @@ const NotificationService = withService("NotificationService")((mailbox) => {
     };
 
     // Emit notification event for other components
-    mailbox.tell(appDomain)("notification", notification);
+    appChannel.tell("notification", notification);
   });
 });
 
-const NotificationDisplay = withMailbox("NotificationDisplay")(
-  ({ mailbox }) => {
+const NotificationDisplay = withChannel("NotificationDisplay", [appDomain])(
+  ({ app: appChannel }) => {
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
     // Subscribe to app notifications
-    mailbox.receive(appDomain, "notification", (notification) => {
+    appChannel.receive("notification", (notification) => {
       setNotifications((prev) => [notification, ...prev.slice(0, 4)]);
     });
 
@@ -216,15 +221,15 @@ const NotificationDisplay = withMailbox("NotificationDisplay")(
   }
 );
 
-const OrderManager = withMailbox<{ id: number }>("OrderManager")(
-  ({ mailbox }) => {
+const OrderManager = withChannel("OrderManager", [orderDomain])<{ id: number }>(
+  ({ order: orderChannel }) => {
     const [orders, setOrders] = useState([
       { id: "1", status: "pending", total: 99.99 },
       { id: "2", status: "shipped", total: 149.99 },
     ]);
 
     // Subscribe to order updates
-    mailbox.receive(orderDomain, "statusUpdated", (payload) => {
+    orderChannel.receive("statusUpdated", (payload) => {
       setOrders((prev) =>
         prev.map((order) =>
           order.id === payload.orderId
@@ -241,7 +246,7 @@ const OrderManager = withMailbox<{ id: number }>("OrderManager")(
         )
       );
 
-      mailbox.tell(orderDomain, "statusUpdated", {
+      orderChannel.tell("statusUpdated", {
         orderId,
         status: newStatus,
         timestamp: Date.now(),

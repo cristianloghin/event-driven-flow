@@ -91,27 +91,36 @@ export type SyncStateFn = <
   ) => void
 ];
 
-export interface ComponentMailboxInterface {
-  tell<TSchema extends ChannelSchema, TAction extends StringKey<TSchema>>(
-    channel: TypedChannel<TSchema>,
-    action: TAction,
-    payload: TSchema[TAction]
-  ): void;
-
-  ask<
-    TSchema extends ChannelSchema,
-    TAction extends StringKey<TSchema>,
-    TResponse extends ActionState = ActionState
-  >(
-    channel: TypedChannel<TSchema>,
-    action: TAction,
-    payload: TSchema[TAction],
+export interface ChannelAPI<TSchema extends ChannelSchema> {
+  receive: <KAction extends StringKey<TSchema>>(
+    action: KAction,
+    handler: (payload: TSchema[KAction], metadata: EventMetadata) => void
+  ) => void;
+  tell: <KAction extends StringKey<TSchema>>(
+    action: KAction,
+    payload: TSchema[KAction]
+  ) => void;
+  ask: <KAction extends StringKey<TSchema>, TResponse>(
+    action: KAction,
+    payload: TSchema[KAction],
     timeout?: number
-  ): Promise<TResponse>;
-
-  receive<TSchema extends ChannelSchema, TAction extends StringKey<TSchema>>(
-    channel: TypedChannel<TSchema>,
-    action: TAction,
-    handler: (payload: TSchema[TAction], metadata: EventMetadata) => void
-  ): void;
+  ) => Promise<TResponse>;
+  reply: <KAction extends StringKey<TSchema>, TResponse>(
+    action: KAction,
+    cb: (payload: TSchema[KAction]) => TResponse
+  ) => void;
+  syncState: <KAction extends StringKey<TSchema>>(
+    action: KAction,
+    options?: {
+      initialValue?: TSchema[KAction];
+      restoreOnMount?: boolean;
+    }
+  ) => [
+    TSchema[KAction],
+    (
+      newValue:
+        | TSchema[KAction]
+        | ((prevState: TSchema[KAction]) => TSchema[KAction])
+    ) => void
+  ];
 }

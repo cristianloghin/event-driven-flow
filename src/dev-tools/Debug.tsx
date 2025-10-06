@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { globalEventManager } from "../core/EventManager";
-import { ActionState, ChannelSchema, ListenerInfo } from "../types";
 
 export const EventManagerDebugPanel: React.FC<{ isVisible: boolean }> = ({
   isVisible,

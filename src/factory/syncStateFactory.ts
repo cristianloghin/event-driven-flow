@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ComponentMailbox } from "../core/ComponentMailbox";
 import { ChannelSchema, StringKey, TypedChannel } from "../types";
 import { globalEventManager } from "../core/EventManager";
 
-export function createSyncState(mailbox: ComponentMailbox) {
-  return function useSyncState<
-    TSchema extends ChannelSchema,
-    TAction extends StringKey<TSchema>
-  >(
-    channel: TypedChannel<TSchema>,
+export function syncStateFactory<TSchema extends ChannelSchema>(
+  channel: TypedChannel<TSchema>
+) {
+  return function useSyncState<TAction extends StringKey<TSchema>>(
     action: TAction,
     options?: {
       initialValue?: TSchema[TAction];
@@ -44,15 +41,15 @@ export function createSyncState(mailbox: ComponentMailbox) {
     }, []);
 
     useEffect(() => {
-      const unsub = mailbox.receive(channel, action, (payload) => {
+      const listenerId = channel.subscribe(action, (payload) => {
         setState(payload);
         stateRef.current = payload;
       });
 
       return () => {
-        unsub();
+        globalEventManager.unsubscribe(listenerId);
       };
-    }, [mailbox, channel, action]);
+    }, [channel, action]);
 
     const updateState = useCallback(
       (
@@ -67,9 +64,9 @@ export function createSyncState(mailbox: ComponentMailbox) {
 
         setState(finalState);
         stateRef.current = finalState;
-        mailbox.tell(channel, action, finalState);
+        channel.emit(action, finalState);
       },
-      [mailbox, channel, action]
+      [channel, action]
     );
 
     return [state, updateState];

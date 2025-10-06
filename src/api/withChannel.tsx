@@ -1,26 +1,13 @@
 import { memo, useEffect, useRef } from "react";
+import { ChannelAPI, ChannelSchema, TypedChannel } from "../types";
+import { globalEventManager } from "../core/EventManager";
 import {
-  ChannelSchema,
-  EventMetadata,
-  StringKey,
-  TypedChannel,
-} from "../types";
-import { ComponentMailbox } from "../core/ComponentMailbox";
-import { createChannelReceive } from "./createChannelReceive";
-
-interface WrappedChannel<
-  TSchema extends ChannelSchema,
-  TAction extends StringKey<TSchema> = StringKey<TSchema>
-> {
-  receive: (
-    action: TAction,
-    handler: (payload: TSchema[TAction], metadata: EventMetadata) => void
-  ) => void;
-  tell: <KAction extends StringKey<TSchema>>(
-    action: KAction,
-    payload: TSchema[KAction]
-  ) => void;
-}
+  askFactory,
+  receiveFactory,
+  replyFactory,
+  syncStateFactory,
+  tellFactory,
+} from "../factory";
 
 export function withChannel<
   const TChannels extends readonly TypedChannel<ChannelSchema>[]
@@ -28,42 +15,50 @@ export function withChannel<
   return function <P extends Record<string, unknown> = {}>(
     Component: React.ComponentType<
       P & {
-        [K in TChannels[number]["name"]]: WrappedChannel<
+        [K in TChannels[number]["name"]]: ChannelAPI<
           Extract<TChannels[number], { name: K }>["initialState"]
         >;
       }
     >
   ) {
     const Wrapped = (props: P) => {
-      const mailboxRef = useRef<ComponentMailbox | null>(null);
-      const wrappedChannels: Record<string, unknown> = {};
+      const componentIdRef = useRef(crypto.randomUUID());
+      const subscriptionsRef = useRef<Set<string>>(new Set());
+      const wrappedChannelsRef = useRef<Record<string, unknown>>({});
 
-      if (!mailboxRef.current) {
-        mailboxRef.current = new ComponentMailbox(componentName, metadata);
-        const mailbox = mailboxRef.current;
-
+      if (Object.keys(wrappedChannelsRef.current).length === 0) {
         channels.forEach((ch) => {
-          wrappedChannels[ch.name] = {
-            tell: mailbox.tell(ch),
-            receive: createChannelReceive(mailbox, ch),
+          const channel = {
+            tell: tellFactory(componentIdRef.current, ch),
+            receive: receiveFactory(componentIdRef.current, ch),
+            ask: askFactory(componentIdRef.current, ch, subscriptionsRef),
+            reply: replyFactory(ch, componentIdRef.current),
+            syncState: syncStateFactory(ch),
           };
+          wrappedChannelsRef.current[ch.name] = channel;
         });
       }
 
       useEffect(() => {
-        const abortController = new AbortController();
-        mailboxRef.current!.init(abortController.signal);
+        globalEventManager.registerComponent(componentIdRef.current, {
+          name: componentName,
+          registeredAt: Date.now(),
+          ...metadata,
+        });
 
         return () => {
-          abortController.abort();
+          subscriptionsRef.current.forEach((id) =>
+            globalEventManager.unsubscribe(id)
+          );
+          globalEventManager.unregisterComponent(componentIdRef.current);
         };
       }, []);
 
       return (
         <Component
           {...props}
-          {...(wrappedChannels as {
-            [K in TChannels[number]["name"]]: WrappedChannel<
+          {...(wrappedChannelsRef.current as {
+            [K in TChannels[number]["name"]]: ChannelAPI<
               Extract<TChannels[number], { name: K }>["initialState"]
             >;
           })}

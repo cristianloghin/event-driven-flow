@@ -1,30 +1,55 @@
 import { memo, useEffect, useRef } from "react";
-import { ComponentMailbox } from "../core/ComponentMailbox";
+import { ChannelAPI, ChannelSchema, TypedChannel } from "../types";
+import {
+  askFactory,
+  receiveFactory,
+  replyFactory,
+  syncStateFactory,
+  tellFactory,
+} from "../factory";
+import { globalEventManager } from "../core/EventManager";
 
 // Helper component that calls the function and returns null
-export function withService(serviceName: string, metadata = {}) {
+export function withService<
+  const TChannels extends readonly TypedChannel<ChannelSchema>[]
+>(serviceName: string, channels: TChannels, metadata = {}) {
   return function (
-    ServiceFn: (mailbox: ComponentMailbox) => void | (() => void)
+    ServiceFn: (channels: {
+      [K in TChannels[number]["name"]]: ChannelAPI<
+        Extract<TChannels[number], { name: K }>["initialState"]
+      >;
+    }) => void | (() => void)
   ) {
     const Wrapped = () => {
-      const mailboxRef = useRef<ComponentMailbox | null>(null);
+      const componentIdRef = useRef(crypto.randomUUID());
+      const subscriptionsRef = useRef<Set<string>>(new Set());
+      const wrappedChannelsRef = useRef<Record<string, unknown>>({});
 
-      if (!mailboxRef.current) {
-        mailboxRef.current = new ComponentMailbox(serviceName, metadata);
+      if (Object.keys(wrappedChannelsRef.current).length === 0) {
+        channels.forEach((ch) => {
+          const channel = {
+            tell: tellFactory(componentIdRef.current, ch),
+            receive: receiveFactory(componentIdRef.current, ch),
+            ask: askFactory(componentIdRef.current, ch, subscriptionsRef),
+            reply: replyFactory(ch, componentIdRef.current),
+            syncState: syncStateFactory(ch),
+          };
+          wrappedChannelsRef.current[ch.name] = channel;
+        });
       }
 
       useEffect(() => {
-        const abortController = new AbortController();
-        const mailbox = mailboxRef.current!;
-        mailbox.init(abortController.signal);
-
-        const maybeCleanup = ServiceFn(mailbox);
+        globalEventManager.registerComponent(componentIdRef.current, {
+          name: serviceName,
+          registeredAt: Date.now(),
+          ...metadata,
+        });
 
         return () => {
-          if (typeof maybeCleanup === "function") {
-            maybeCleanup();
-          }
-          abortController.abort();
+          subscriptionsRef.current.forEach((id) =>
+            globalEventManager.unsubscribe(id)
+          );
+          globalEventManager.unregisterComponent(componentIdRef.current);
         };
       }, []);
 
